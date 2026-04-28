@@ -1,0 +1,21 @@
+---
+const { t } = Astro.props;
+const steps = t.architecture.steps;
+---
+<section id="architecture" class="arch fade-in">
+  <div class="shell">
+    <span class="kicker">{t.architecture.kicker}</span>
+    <h2 class="section-title">{t.architecture.title}</h2>
+    <p class="lede">{t.architecture.stepsHeading}</p>
+
+    <div class="arch__steps">
+      {steps.map((s) => (
+        <article class="arch__step">
+          <div class="arch__step-n">{s.n}</div>
+          <h3>{s.title}</h3>
+          <p>{s.body}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,84 @@
+---
+/* X-Cache wipe / diff / shadow comparator.
+   Two video tracks (baseline left, X-Cache right) drawn into the same stage,
+   kept frame-locked and re-yielded as either:
+     • wipe   — split with a draggable seam
+     • diff   — both layers placed on top of each other in `mix-blend-mode: difference`
+                so identical pixels collapse to black; cache-induced perturbations glow.
+     • shadow — full-frame difference overlay only, for a cinematic delta read-out.
+   Skip rate, speedup, and current chunk are pulled from the data attributes the page
+   provides per-scenario, so the HUD reads as a "live" telemetry panel. */
+const { t, scenario, idx = 0 } = Astro.props;
+const id = `cmp-${scenario.id}`;
+
+// Pull a few telemetry numbers out of the tags array for the on-stage HUD.
+const skipTag = scenario.tags.find((tag) => /skip/i.test(tag) || /跳过/.test(tag)) ?? "skip 71%";
+const speedupTag = scenario.tags.find((tag) => /speedup|加速|×/.test(tag)) ?? "2.6×";
+---
+<article class="demo__item fade-in">
+  <div class="demo__copy">
+    <span class="kicker">{scenario.kicker}</span>
+    <h3>{scenario.title}</h3>
+    <p>{scenario.body}</p>
+    <ul class="demo__tags">
+      {scenario.tags.map((tag) => <li>{tag}</li>)}
+    </ul>
+  </div>
+
+  <div class="cmp" data-mode="wipe" id={id}>
+    <div class="cmp__stage">
+      <div class="cmp__media">
+        <video
+          data-role="baseline"
+          src={scenario.baseline}
+          poster={scenario.poster}
+          preload="metadata"
+          playsinline
+          muted
+          loop
+          aria-label={`${scenario.kicker} · baseline`}>
+        </video>
+      </div>
+
+      <div class="cmp__media-clip">
+        <video
+          data-role="cache"
+          src={scenario.cache}
+          poster={scenario.poster}
+          preload="metadata"
+          playsinline
+          muted
+          loop
+          aria-label={`${scenario.kicker} · X-Cache`}>
+        </video>
+      </div>
+
+      <div class="cmp__hud">
+        <div class="cmp__hud-pill" data-hud="frame">frame 0 / 264</div>
+        <div class="cmp__hud-pill" data-hud="skip">{skipTag}</div>
+        <div class="cmp__hud-pill cmp__hud-pill--ember">{speedupTag}</div>
+      </div>
+
+      <span class="cmp__label cmp__label--left">{t.demo.labelLeft}</span>
+      <span class="cmp__label cmp__label--right">{t.demo.labelRight}</span>
+
+      <div class="cmp__handle" aria-hidden="true"></div>
+    </div>
+
+    <div class="cmp__controls">
+      <div class="cmp__modes" role="group" aria-label="comparison mode">
+        <button type="button" class="cmp__mode-btn" data-mode="wipe" aria-pressed="true">{t.demo.modeWipe}</button>
+        <button type="button" class="cmp__mode-btn" data-mode="diff" aria-pressed="false">{t.demo.modeDiff}</button>
+        <button type="button" class="cmp__mode-btn" data-mode="shadow" aria-pressed="false">{t.demo.modeShadow}</button>
+      </div>
+      <div class="cmp__time">
+        <span data-hud="time">0:00 / 0:22</span>
+      </div>
+      <button type="button" class="cmp__play" data-role="play"
+              data-play-label={t.demo.playLabel}
+              data-pause-label={t.demo.pauseLabel}>
+        <span data-role="play-label">{t.demo.playLabel}</span>
+      </button>
+    </div>
+  </div>
+</article>

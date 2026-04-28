@@ -1,0 +1,42 @@
+---
+const { t } = Astro.props;
+---
+<header class="hero" id="intro-top">
+  <div class="shell fade-in">
+    <span class="hero__tag">{t.hero.tag}</span>
+    <h1 class="hero__title">
+      X<em>·</em>Cache<sup>v1.0</sup>
+    </h1>
+    <p class="hero__subtitle">{t.hero.subtitle}</p>
+    <p class="lede hero__lede">{t.hero.lede}</p>
+
+    <div class="hero__cta">
+      <a class="btn btn--primary" href="#demo">
+        {t.hero.ctaPrimary}
+        <span class="btn__arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="btn btn--ghost" href="#paper">{t.hero.ctaSecondary}</a>
+    </div>
+
+    <div class="hero__stats">
+      <div class="hero__stat">
+        <div class="hero__stat-label">{t.hero.stat1Label}</div>
+        <div class="hero__stat-value">{t.hero.stat1Value}</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-label">{t.hero.stat2Label}</div>
+        <div class="hero__stat-value">{t.hero.stat2Value}</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-label">{t.hero.stat3Label}</div>
+        <div class="hero__stat-value">{t.hero.stat3Value}</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-label">{t.hero.stat4Label}</div>
+        <div class="hero__stat-value">{t.hero.stat4Value}</div>
+      </div>
+    </div>
+
+    <div class="hero__byline">{t.hero.byline}</div>
+  </div>
+</header>

@@ -1,0 +1,18 @@
+---
+const { t } = Astro.props;
+const items = t.safety.items;
+---
+<section id="safety" class="safety fade-in">
+  <div class="shell">
+    <span class="kicker">{t.safety.kicker}</span>
+    <h2 class="section-title">{t.safety.title}</h2>
+    <div class="safety__grid">
+      {items.map((it) => (
+        <article class="safety__card">
+          <h3>{it.title}</h3>
+          <p>{it.body}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,19 @@
+---
+/* Static-friendly homepage: emit a tiny meta-refresh + JS redirect to /en/.
+   We can't use `Astro.redirect()` for `output: 'static'` builds; this works
+   in both static and SSR. */
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>X-Cache</title>
+    <meta http-equiv="refresh" content="0; url=/en/" />
+    <link rel="canonical" href="/en/" />
+    <script>
+      window.location.replace("/en/");
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to <a href="/en/">/en/</a>…</p>
+  </body>
+</html>

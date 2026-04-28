@@ -1,0 +1,178 @@
+{
+  "meta": {
+    "title": "X-Cache · Cross-Chunk Block Caching",
+    "description": "A training-free, cross-chunk caching method for few-step autoregressive driving world models. 71% block skip, 2.6× wall-clock speedup, no visible quality loss.",
+    "ogAlt": "X-Cache: cross-chunk block caching for autoregressive video diffusion."
+  },
+  "nav": {
+    "intro": "Intro",
+    "principle": "Principle",
+    "architecture": "Architecture",
+    "safety": "Safety",
+    "demo": "Demos",
+    "results": "Results",
+    "paper": "Tech Report",
+    "switch": "中文"
+  },
+  "hero": {
+    "tag": "Technical Report · 2026",
+    "title": "X-Cache",
+    "subtitle": "Cross-Chunk Block Caching for Few-Step Autoregressive World Models",
+    "lede": "Generate the next chunk of a 7-camera driving world without paying full DiT compute. X-Cache reuses block residuals across consecutive chunks instead of across denoising steps — surviving few-step distillation that erases every other caching trick.",
+    "stat1Label": "DiT speedup",
+    "stat1Value": "2.6×",
+    "stat2Label": "Block skip rate",
+    "stat2Value": "71%",
+    "stat3Label": "7-cam PSNR",
+    "stat3Value": "≥ 51 dB",
+    "stat4Label": "Training cost",
+    "stat4Value": "0",
+    "ctaPrimary": "See the demos",
+    "ctaSecondary": "Read the report",
+    "byline": "AI Infra Team · XPeng Inc."
+  },
+  "intro": {
+    "kicker": "01 · The problem",
+    "title": "Real-time world simulation breaks every existing cache.",
+    "p1": "Autoregressive video diffusion is the natural backbone for an interactive driving world: it streams chunk by chunk, conditions on a live policy's actions, and never waits for a full clip. To meet real-time budgets, models like X-World are distilled to four denoising steps.",
+    "p2": "That distillation collapses the redundancy that every prior cache relies on. TeaCache, DeepCache, ΔDiT, BWCache — all reuse block outputs across denoising steps. With S = 4, each step contributes substantial, non-redundant structural updates. There is nothing left to skip on that axis.",
+    "p3": "Worse, the per-chunk action stream is intentionally non-smooth at chunk boundaries (braking, steering, lane-change), and closed-loop generation forbids look-ahead, ruling out trajectory extrapolation and block-cascading parallelism. Every familiar acceleration tool fails here."
+  },
+  "principle": {
+    "kicker": "02 · The insight",
+    "title": "Cache along a different axis.",
+    "lede": "Driving scenes evolve smoothly relative to the generation rate. Two consecutive chunks describe almost the same physical world. The block input at position (t, b) at chunk n is therefore highly similar to the same (t, b) at chunk n−1 — even when there are only four denoising steps inside.",
+    "axisStepLabel": "Cross-step (others)",
+    "axisStepDesc": "Reuse block outputs between adjacent denoising steps. Erased by few-step distillation.",
+    "axisChunkLabel": "Cross-chunk (X-Cache)",
+    "axisChunkDesc": "Reuse block residuals between adjacent generation chunks. Comes from physical scene continuity, survives any S.",
+    "diagramCaption": "Block residuals from chunk n are written into a per-(t, b) cache. At chunk n+1, the gate decides per block whether to recompute or reuse.",
+    "equationCaption": "Approximate the next chunk's block output by adding the cached residual to the current block input.",
+    "principlePoints": [
+      {
+        "label": "Block-level residual cache",
+        "body": "Per (denoising step t, block b) slot. The cache key is the block position, not the timestep, so reuse always happens at matching positions."
+      },
+      {
+        "label": "Structure & action-aware fingerprint",
+        "body": "Subsamples block inputs on the 3D (F, H, W) latent grid (32 tokens), plus a global-mean channel and a flattened action vector. Closed-form, ~free to compute."
+      },
+      {
+        "label": "Dual-metric gate",
+        "body": "Cosine similarity (global direction) AND maximum token deviation (local outlier). A block is skipped only if both pass — anomalies in any view group veto reuse."
+      },
+      {
+        "label": "Per-(t, b) adaptive threshold",
+        "body": "An EMA of each cell's own cosine history sets the threshold from below; a hard floor τ = 0.97 guarantees a quality margin."
+      }
+    ]
+  },
+  "architecture": {
+    "kicker": "03 · The pipeline",
+    "title": "What happens inside one chunk.",
+    "stepsHeading": "From noise to a 7-camera chunk, in four passes.",
+    "steps": [
+      {
+        "n": "01",
+        "title": "Sample noise & init context",
+        "body": "Each chunk starts from Gaussian noise; the rolling KV cache supplies the long-horizon history. The current action vector enters every block via adaLN-Zero."
+      },
+      {
+        "n": "02",
+        "title": "Compute fingerprints",
+        "body": "Per block input, sample 32 tokens on the 3D latent grid (proportional to Fg : Hg : Wg). Append the global mean and the action vector. Cost: a single index-and-flatten."
+      },
+      {
+        "n": "03",
+        "title": "Gate decision",
+        "body": "Compare current fingerprint to the cached fingerprint at (t, b). Skip iff cosine ≥ τ_cos(t, b) AND max-deviation < τ_dev. Otherwise compute the block and refresh the cache."
+      },
+      {
+        "n": "04",
+        "title": "KV update — protected",
+        "body": "After the last denoising step, X-World writes a clean key/value into the persistent cache. On that chunk we force-compute every block, refusing to let approximation contaminate the autoregressive context."
+      }
+    ],
+    "schemaCaption": "End-to-end view: fingerprint → dual-metric gate → residual reuse vs. full compute → KV-update guarded recompute."
+  },
+  "safety": {
+    "kicker": "04 · Safety mechanisms",
+    "title": "Four guardrails that keep approximation contained.",
+    "items": [
+      {
+        "title": "KV-update protection",
+        "body": "The pass that writes clean K/V into the rolling cache is force-computed in full. Skipping here is the only knob that materially breaks quality (PSNR drops from 53.4 → 21.5 dB)."
+      },
+      {
+        "title": "Anchor block (F_n = 1)",
+        "body": "Block 0 always recomputes, so the fresh action and conditioning cascade into every downstream block's fingerprint and naturally reset stale chains."
+      },
+      {
+        "title": "Step-0 protection (optional)",
+        "body": "Off by default — the cosine gate already vetoes step 0 reuse where it would matter. Available as an extra margin under heavy distribution shift."
+      },
+      {
+        "title": "Adaptive threshold floor",
+        "body": "τ_floor = 0.97 caps how loose the per-cell EMA threshold can drift. Inactive on the current workload, but armed for tails."
+      }
+    ]
+  },
+  "demo": {
+    "kicker": "05 · Lossless · in motion",
+    "title": "Drag the curtain. There is no quality drop.",
+    "lede": "Three scenarios, one toggle. Sweep the seam to compare baseline full-compute (left) and X-Cache (right) side by side, switch into the 20×-amplified diff to inspect every pixel of approximation error, or play them in shadow mode to overlay both at once.",
+    "modeWipe": "Wipe",
+    "modeDiff": "Diff ×20",
+    "modeShadow": "Shadow",
+    "labelLeft": "Baseline · full compute",
+    "labelRight": "X-Cache · 2.6× faster",
+    "playLabel": "Play",
+    "pauseLabel": "Pause",
+    "scenarios": [
+      {
+        "id": "urban",
+        "kicker": "Urban street",
+        "title": "Dense traffic, pedestrians, storefronts.",
+        "body": "Seven urban clips with the highest static texture density in the test split. The cosine gate runs near-saturated; skip rate stays at 71.4% and the residual sits on lane edges and far-field foliage.",
+        "tags": ["7 clips", "264 frames each", "PSNR 51.4 dB", "skip 71.4%"],
+        "baseline": "/videos/urban_baseline.mp4",
+        "cache": "/videos/urban_cache.mp4",
+        "poster": "/videos/urban_poster.jpg"
+      },
+      {
+        "id": "highway",
+        "kicker": "Highway",
+        "title": "Elevated express ring & ordinary motorway.",
+        "body": "Three clips. Long depth of field, rapid forward motion, sparse foreground. The gate skips 71.6% of blocks — and decoded 7-cam PSNR climbs to 54.7 dB because most pixels are sky/asphalt that absorb latent perturbations cleanly.",
+        "tags": ["3 clips", "PSNR 54.7 dB", "skip 71.6%", "speedup 2.66×"],
+        "baseline": "/videos/highway_baseline.mp4",
+        "cache": "/videos/highway_cache.mp4",
+        "poster": "/videos/highway_poster.jpg"
+      },
+      {
+        "id": "uturn",
+        "kicker": "U-turn",
+        "title": "Maximum cross-chunk motion in the split.",
+        "body": "Three clips where the ego vehicle executes a sharp heading change. Adjacent chunks are the most different in the dataset — yet the cross-chunk fingerprint still survives, with skip rate 71.3% and no chunk-boundary drift visible in the per-frame PSNR trace.",
+        "tags": ["3 clips", "PSNR 52.0 dB", "skip 71.3%", "speedup 2.70×"],
+        "baseline": "/videos/uturn_baseline.mp4",
+        "cache": "/videos/uturn_cache.mp4",
+        "poster": "/videos/uturn_poster.jpg"
+      }
+    ]
+  },
+  "results": {
+    "kicker": "06 · Numbers",
+    "title": "Same seed, same conditioning, 2.6× faster — and the pixels prove it.",
+    "tableCaption": "Per-scenario summary against the no-cache baseline. Per-camera rows are F-C (front centre), F-W (front wide), S-FL/FR/RL/RR (sides) and Rear; the highlighted 7-cam row is the stitched 7-view image used in the qualitative figures.",
+    "ablationCaption": "One protection mechanism removed at a time on a held-out highway clip. KV-update protection is the only hard requirement; every other knob is a margin-of-safety knob.",
+    "skipKicker": "Skip rate by block index",
+    "skipBody": "All three scenarios follow nearly the same curve: blocks 1–19 sit on the 0.75 plateau implied by W = 1 warmup over a 4-chunk reuse window; blocks 20–26 fall to ≈ 0.69. The 0.3-pp spread between scenarios comes from movement inside this fixed set of blocks, not from scene content."
+  },
+  "footer": {
+    "team": "AI Infra Team · XPeng Inc.",
+    "report": "Technical Report",
+    "year": "2026",
+    "note": "Site code, generation scripts, and the full report live in this repo. Videos are produced from the held-out test rollouts under wm_v2.0."
+  }
+}

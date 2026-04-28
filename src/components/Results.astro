@@ -1,0 +1,140 @@
+---
+const { t } = Astro.props;
+
+// numbers from the report — Table tab:main
+const rows = [
+  { scenario: "Urban street · n=7",  data: [
+    ["F-C",   "53.83", "0.9988", "3.6e-4"],
+    ["F-W",   "50.27", "0.9987", "4.3e-4"],
+    ["S-FL",  "49.49", "0.9985", "5.1e-4"],
+    ["S-FR",  "48.69", "0.9984", "5.2e-4"],
+    ["S-RL",  "48.59", "0.9985", "4.8e-4"],
+    ["S-RR",  "48.07", "0.9985", "5.2e-4"],
+    ["Rear",  "51.77", "0.9986", "4.7e-4"],
+    ["7-cam", "51.37", "0.9990", "3.3e-4"],
+  ], skip: "71.4 %", dit: "1.392 s", speed: "2.65×" },
+  { scenario: "Highway · n=3",       data: [
+    ["F-C",   "54.87", "0.9989", "2.6e-4"],
+    ["F-W",   "54.38", "0.9988", "2.3e-4"],
+    ["S-FL",  "53.08", "0.9987", "2.8e-4"],
+    ["S-FR",  "52.20", "0.9987", "2.9e-4"],
+    ["S-RL",  "52.48", "0.9987", "2.5e-4"],
+    ["S-RR",  "51.90", "0.9986", "3.0e-4"],
+    ["Rear",  "53.42", "0.9987", "3.2e-4"],
+    ["7-cam", "54.67", "0.9991", "1.9e-4"],
+  ], skip: "71.6 %", dit: "1.365 s", speed: "2.66×" },
+  { scenario: "U-turn · n=3",        data: [
+    ["F-C",   "54.60", "0.9987", "4.3e-4"],
+    ["F-W",   "51.79", "0.9987", "3.6e-4"],
+    ["S-FL",  "49.29", "0.9985", "4.6e-4"],
+    ["S-FR",  "49.18", "0.9985", "4.7e-4"],
+    ["S-RL",  "48.87", "0.9985", "4.0e-4"],
+    ["S-RR",  "48.82", "0.9984", "4.9e-4"],
+    ["Rear",  "52.51", "0.9986", "4.2e-4"],
+    ["7-cam", "52.04", "0.9990", "3.1e-4"],
+  ], skip: "71.3 %", dit: "1.364 s", speed: "2.70×" },
+];
+
+// per-block skip-rate curve, hand-extracted from the paper's plot.
+const skipCurve = [
+  /* block 1..26 */
+  0.751, 0.748, 0.746, 0.748, 0.749, 0.750, 0.752, 0.751, 0.751, 0.750,
+  0.749, 0.751, 0.751, 0.752, 0.751, 0.749, 0.748, 0.749, 0.747, 0.731,
+  0.722, 0.706, 0.698, 0.696, 0.694, 0.690,
+];
+const skipPoints = skipCurve.map((v, i) => {
+  const x = 40 + i / 25 * 270;
+  const y = 170 - (v - 0.6) / 0.25 * 150;
+  return `${x.toFixed(1)},${y.toFixed(1)}`;
+}).join(" ");
+const skipArea = `40,170 ${skipPoints} ${(40 + (skipCurve.length - 1) / 25 * 270).toFixed(1)},170`;
+---
+<section id="results" class="results fade-in">
+  <div class="shell">
+    <span class="kicker">{t.results.kicker}</span>
+    <h2 class="section-title">{t.results.title}</h2>
+
+    <div class="results__grid">
+      <div>
+        <table class="metrics">
+          <caption>{t.results.tableCaption}</caption>
+          <thead>
+            <tr>
+              <th>Scenario / camera</th>
+              <th>PSNR ↑ (dB)</th>
+              <th>SSIM ↑</th>
+              <th>LPIPS ↓</th>
+              <th>Skip</th>
+              <th>DiT</th>
+              <th>Speed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <Fragment>
+                <tr class="scenario-head">
+                  <td colspan="7">{row.scenario}</td>
+                </tr>
+                {row.data.map((d, j) => (
+                  <tr class={d[0] === "7-cam" ? "combined" : ""}>
+                    <td>{d[0]}</td>
+                    <td>{d[1]}</td>
+                    <td>{d[2]}</td>
+                    <td>{d[3]}</td>
+                    <td>{j === 0 ? row.skip : ""}</td>
+                    <td>{j === 0 ? row.dit : ""}</td>
+                    <td>{j === 0 ? row.speed : ""}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <aside class="skip-card">
+        <span class="kicker">{t.results.skipKicker}</span>
+        <p>{t.results.skipBody}</p>
+        <svg class="skip-card__chart" viewBox="0 0 320 200" aria-hidden="true">
+          <defs>
+            <linearGradient id="gradFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stop-color="#c83a1a" stop-opacity="0.45" />
+              <stop offset="100%" stop-color="#c83a1a" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <!-- axes -->
+          <line x1="40" y1="170" x2="310" y2="170" stroke="#0d0e10" stroke-width="0.8" />
+          <line x1="40" y1="20"  x2="40"  y2="170" stroke="#0d0e10" stroke-width="0.8" />
+          <!-- 0.75 plateau -->
+          <line x1="40" y1="60" x2="310" y2="60" stroke="#244a3a" stroke-dasharray="3 3" stroke-width="0.8" />
+          <text x="42" y="56" font-family="JetBrains Mono" font-size="9" fill="#244a3a">0.75 plateau (W=1)</text>
+          <!-- y axis ticks -->
+          {[0.6, 0.7, 0.8].map((v) => {
+            const y = 170 - (v - 0.6) / 0.25 * 150;
+            return (
+              <g>
+                <line x1="38" y1={y} x2="40" y2={y} stroke="#0d0e10" stroke-width="0.7" />
+                <text x="32" y={y + 3} text-anchor="end" font-family="JetBrains Mono" font-size="8" fill="#4a4d57">{v.toFixed(1)}</text>
+              </g>
+            );
+          })}
+          {[1, 5, 10, 15, 20, 25].map((v) => {
+            const x = 40 + (v - 1) / 25 * 270;
+            return (
+              <g>
+                <line x1={x} y1="170" x2={x} y2="172" stroke="#0d0e10" stroke-width="0.7" />
+                <text x={x} y="184" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="#4a4d57">{v}</text>
+              </g>
+            );
+          })}
+          <text x="175" y="196" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#4a4d57">block index</text>
+          <!-- area under curve -->
+          <polygon points={skipArea} fill="url(#gradFill)" />
+          <polyline points={skipPoints} fill="none" stroke="#c83a1a" stroke-width="1.6" />
+          <!-- annotation -->
+          <text x="210" y="142" font-family="JetBrains Mono" font-size="8" fill="#c83a1a">tail: ~0.69</text>
+        </svg>
+      </aside>
+    </div>
+  </div>
+</section>

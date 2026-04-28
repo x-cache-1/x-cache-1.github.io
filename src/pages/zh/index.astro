@@ -1,0 +1,26 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import Nav from "../../components/Nav.astro";
+import Hero from "../../components/Hero.astro";
+import Intro from "../../components/Intro.astro";
+import Principle from "../../components/Principle.astro";
+import Architecture from "../../components/Architecture.astro";
+import Safety from "../../components/Safety.astro";
+import Demos from "../../components/Demos.astro";
+import Results from "../../components/Results.astro";
+import Footer from "../../components/Footer.astro";
+import zh from "../../i18n/zh.json";
+
+const t = zh;
+---
+<Layout title={t.meta.title} description={t.meta.description} ogAlt={t.meta.ogAlt} lang="zh-CN">
+  <Nav t={t} lang="zh" />
+  <Hero t={t} />
+  <Intro t={t} />
+  <Principle t={t} />
+  <Architecture t={t} />
+  <Safety t={t} />
+  <Demos t={t} />
+  <Results t={t} />
+  <Footer t={t} />
+</Layout>

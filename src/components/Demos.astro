@@ -1,0 +1,129 @@
+---
+import Compare from "./Compare.astro";
+const { t } = Astro.props;
+const scenarios = t.demo.scenarios;
+---
+<section id="demo" class="demo fade-in">
+  <div class="shell">
+    <div class="demo__head">
+      <div>
+        <span class="kicker">{t.demo.kicker}</span>
+        <h2 class="section-title">{t.demo.title}</h2>
+      </div>
+      <p class="lede">{t.demo.lede}</p>
+    </div>
+
+    <div class="demo__list">
+      {scenarios.map((s, i) => <Compare scenario={s} t={t} idx={i} />)}
+    </div>
+  </div>
+</section>
+
+<script>
+  /* ----- comparator runtime ----- */
+  const fmt = (n) => {
+    if (!Number.isFinite(n)) return "0:00";
+    const m = Math.floor(n / 60).toString();
+    const s = Math.floor(n % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  document.querySelectorAll(".cmp").forEach((root) => {
+    const baseline = root.querySelector('video[data-role="baseline"]');
+    const cache    = root.querySelector('video[data-role="cache"]');
+    const diff     = root.querySelector(".cmp__diff");
+    const handle   = root.querySelector(".cmp__handle");
+    const clip     = root.querySelector(".cmp__media-clip");
+    const playBtn  = root.querySelector('[data-role="play"]');
+    const playLabel = root.querySelector('[data-role="play-label"]');
+    const playText  = playBtn.dataset.playLabel;
+    const pauseText = playBtn.dataset.pauseLabel;
+    const hudFrame = root.querySelector('[data-hud="frame"]');
+    const hudTime  = root.querySelector('[data-hud="time"]');
+    const stage    = root.querySelector(".cmp__stage");
+    const modeBtns = root.querySelectorAll(".cmp__mode-btn");
+
+    let pct = 0.5;
+    let dragging = false;
+
+    const applyClip = () => {
+      const right = (1 - pct) * 100;
+      clip.style.clipPath = `inset(0 0 0 ${pct * 100}%)`;
+      handle.style.left = `${pct * 100}%`;
+    };
+
+    const setMode = (mode) => {
+      root.dataset.mode = mode;
+      modeBtns.forEach((b) =>
+        b.setAttribute("aria-pressed", b.dataset.mode === mode ? "true" : "false")
+      );
+      if (mode === "wipe") applyClip();
+    };
+
+    const setSeam = (clientX) => {
+      const r = stage.getBoundingClientRect();
+      pct = Math.max(0.04, Math.min(0.96, (clientX - r.left) / r.width));
+      applyClip();
+    };
+
+    stage.addEventListener("pointerdown", (ev) => {
+      if (root.dataset.mode !== "wipe") return;
+      dragging = true;
+      stage.setPointerCapture(ev.pointerId);
+      setSeam(ev.clientX);
+    });
+    stage.addEventListener("pointermove", (ev) => {
+      if (!dragging) return;
+      setSeam(ev.clientX);
+    });
+    stage.addEventListener("pointerup",   () => (dragging = false));
+    stage.addEventListener("pointercancel", () => (dragging = false));
+
+    // sync the two video tracks every animation frame while playing
+    let raf = 0;
+    const tick = () => {
+      // soft-correct drift between the two streams
+      if (Math.abs(baseline.currentTime - cache.currentTime) > 0.06) {
+        cache.currentTime = baseline.currentTime;
+      }
+      const dur = baseline.duration || 22;
+      const cur = baseline.currentTime || 0;
+      const totalFrames = Math.round(dur * 12);   // 12 fps on these clips
+      const curFrame = Math.min(totalFrames, Math.floor(cur * 12));
+      hudFrame.textContent = `frame ${curFrame.toString().padStart(3, "0")} / ${totalFrames}`;
+      hudTime.textContent  = `${fmt(cur)} / ${fmt(dur)}`;
+      raf = requestAnimationFrame(tick);
+    };
+
+    const togglePlay = () => {
+      if (baseline.paused) {
+        Promise.all([baseline.play(), cache.play()]).then(() => {
+          playLabel.textContent = pauseText;
+          tick();
+        }).catch(() => {});
+      } else {
+        baseline.pause();
+        cache.pause();
+        playLabel.textContent = playText;
+        cancelAnimationFrame(raf);
+      }
+    };
+
+    playBtn.addEventListener("click", togglePlay);
+
+    // play when the demo enters the viewport for the first time
+    const obs = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && baseline.paused) {
+          togglePlay();
+          obs.unobserve(root);
+        }
+      }
+    }, { threshold: 0.4 });
+    obs.observe(root);
+
+    modeBtns.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+    applyClip();
+  });
+</script>

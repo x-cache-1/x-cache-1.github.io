@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" font-family="-apple-system, BlinkMacSystemFont, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6f1e6"/>
+      <stop offset="1" stop-color="#efe7d3"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M0 0H48V48" fill="none" stroke="#0d0e10" stroke-opacity="0.06"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <text x="80" y="160" font-size="36" letter-spacing="6" fill="#c83a1a" font-weight="600">TECHNICAL REPORT · 2026</text>
+  <text x="80" y="320" font-size="160" letter-spacing="-6" font-family="Source Serif 4, serif" fill="#0d0e10" font-weight="600">X·Cache</text>
+  <text x="80" y="380" font-size="38" fill="#1c1d22" font-family="Source Serif 4, serif">Cross-chunk block caching for few-step</text>
+  <text x="80" y="426" font-size="38" fill="#1c1d22" font-family="Source Serif 4, serif">autoregressive driving world models.</text>
+  <g transform="translate(80,520)" font-family="JetBrains Mono, monospace" font-size="22" fill="#0d0e10">
+    <text>2.6×  speedup</text>
+    <text x="280">71%  block skip</text>
+    <text x="560">0   training cost</text>
+  </g>
+  <text x="1120" y="600" text-anchor="end" font-size="20" letter-spacing="4" fill="#4a4d57" font-family="JetBrains Mono, monospace">XPENG · AI INFRA</text>
+</svg>

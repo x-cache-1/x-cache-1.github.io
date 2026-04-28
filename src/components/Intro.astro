@@ -1,0 +1,16 @@
+---
+const { t } = Astro.props;
+---
+<section id="intro" class="intro fade-in">
+  <div class="shell">
+    <span class="kicker">{t.intro.kicker}</span>
+    <h2 class="section-title">{t.intro.title}</h2>
+    <div class="intro__body">
+      <p>{t.intro.p1}</p>
+      <div>
+        <p>{t.intro.p2}</p>
+        <p>{t.intro.p3}</p>
+      </div>
+    </div>
+  </div>
+</section>

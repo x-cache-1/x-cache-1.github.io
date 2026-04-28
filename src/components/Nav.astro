@@ -1,0 +1,20 @@
+---
+const { t, lang } = Astro.props;
+const other = lang === "en" ? "/zh/" : "/en/";
+---
+<nav class="nav">
+  <a class="nav__brand" href={`/${lang}/`} aria-label="X-Cache">
+    <span class="nav__brand-mark">X<em>·</em>Cache</span>
+    <span class="nav__brand-tag">/ AI INFRA · XPENG</span>
+  </a>
+
+  <div class="nav__links">
+    <a href="#intro">{t.nav.intro}</a>
+    <a href="#principle">{t.nav.principle}</a>
+    <a href="#architecture">{t.nav.architecture}</a>
+    <a href="#demo">{t.nav.demo}</a>
+    <a href="#results">{t.nav.results}</a>
+    <a class="nav__paper" href="#paper">{t.nav.paper}</a>
+    <a class="nav__lang" href={other}>{t.nav.switch}</a>
+  </div>
+</nav>
