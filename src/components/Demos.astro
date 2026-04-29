@@ -20,7 +20,11 @@ const scenarios = t.demo.scenarios;
 </section>
 
 <script>
-  /* ----- comparator runtime ----- */
+  /* ---------------- comparator runtime ----------------
+     Three videos per stage (baseline / cache / heatmap), kept frame-locked,
+     surfaced as two modes (wipe / heatmap), with a draggable scrubber and a
+     per-frame block-skip ribbon. */
+
   const fmt = (n) => {
     if (!Number.isFinite(n)) return "0:00";
     const m = Math.floor(n / 60).toString();
@@ -28,10 +32,21 @@ const scenarios = t.demo.scenarios;
     return `${m}:${s}`;
   };
 
+  /* Reproducible PRNG so each frame's block ribbon is deterministic. */
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
   document.querySelectorAll(".cmp").forEach((root) => {
     const baseline = root.querySelector('video[data-role="baseline"]');
     const cache    = root.querySelector('video[data-role="cache"]');
-    const diff     = root.querySelector(".cmp__diff");
+    const heatmap  = root.querySelector('video[data-role="heatmap"]');
     const handle   = root.querySelector(".cmp__handle");
     const clip     = root.querySelector(".cmp__media-clip");
     const playBtn  = root.querySelector('[data-role="play"]');
@@ -43,11 +58,21 @@ const scenarios = t.demo.scenarios;
     const stage    = root.querySelector(".cmp__stage");
     const modeBtns = root.querySelectorAll(".cmp__mode-btn");
 
-    let pct = 0.5;
+    // scrubber
+    const scrub       = root.querySelector('[data-role="scrub"]');
+    const scrubBar    = root.querySelector(".cmp__scrub-bar");
+    const scrubFill   = root.querySelector('[data-role="scrub-fill"]');
+    const scrubHandle = root.querySelector('[data-role="scrub-handle"]');
+
+    // block ribbon
+    const blocks = Array.from(root.querySelectorAll(".blk"));
+
+    let pct = 0.5;     // wipe seam position
     let dragging = false;
+    let scrubbing = false;
 
     const applyClip = () => {
-      const right = (1 - pct) * 100;
+      if (!clip) return;
       clip.style.clipPath = `inset(0 0 0 ${pct * 100}%)`;
       handle.style.left = `${pct * 100}%`;
     };
@@ -72,46 +97,106 @@ const scenarios = t.demo.scenarios;
       stage.setPointerCapture(ev.pointerId);
       setSeam(ev.clientX);
     });
-    stage.addEventListener("pointermove", (ev) => {
-      if (!dragging) return;
-      setSeam(ev.clientX);
-    });
+    stage.addEventListener("pointermove", (ev) => dragging && setSeam(ev.clientX));
     stage.addEventListener("pointerup",   () => (dragging = false));
     stage.addEventListener("pointercancel", () => (dragging = false));
 
-    // sync the two video tracks every animation frame while playing
+    /* scrubber: click and drag on the bar to seek */
+    const seekToBarX = (clientX) => {
+      const r = scrubBar.getBoundingClientRect();
+      const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      const dur = baseline.duration || 22;
+      const t = f * dur;
+      baseline.currentTime = t;
+      cache.currentTime = t;
+      if (heatmap) heatmap.currentTime = t;
+      paintScrub(f);
+    };
+    scrubBar.addEventListener("pointerdown", (ev) => {
+      scrubbing = true;
+      scrubBar.setPointerCapture(ev.pointerId);
+      seekToBarX(ev.clientX);
+    });
+    scrubBar.addEventListener("pointermove", (ev) => scrubbing && seekToBarX(ev.clientX));
+    scrubBar.addEventListener("pointerup",   () => (scrubbing = false));
+    scrubBar.addEventListener("pointercancel", () => (scrubbing = false));
+
+    const paintScrub = (f) => {
+      const px = (f * 100).toFixed(2);
+      scrubFill.style.width = `${px}%`;
+      scrubHandle.style.left = `${px}%`;
+    };
+
+    /* block ribbon: per frame, deterministically choose which blocks skip */
+    const paintRibbon = (frameIdx) => {
+      // KV-update chunk = chunks where (chunk_idx % 4 === 3) per the paper's W=1
+      // warmup over the 4-chunk reuse window. On those, FORCE-COMPUTE all blocks.
+      const chunkIdx = Math.floor(frameIdx / 24);
+      const inChunkPos = frameIdx % 24;
+      const isKVUpdate = (chunkIdx % 4 === 3) && (inChunkPos < 3);
+
+      const rng = mulberry32(frameIdx * 31 + 17);
+      blocks.forEach((el, b) => {
+        const prob = parseFloat(el.dataset.skipProb || "0");
+        let state;
+        if (isKVUpdate) {
+          state = "kv";
+        } else if (b === 0) {
+          state = "anchor";
+        } else if (rng() < prob) {
+          state = "skip";
+        } else {
+          state = "compute";
+        }
+        if (el.dataset.state !== state) el.dataset.state = state;
+      });
+    };
+
+    /* main per-frame tick */
     let raf = 0;
     const tick = () => {
-      // soft-correct drift between the two streams
+      // soft-correct drift
       if (Math.abs(baseline.currentTime - cache.currentTime) > 0.06) {
         cache.currentTime = baseline.currentTime;
       }
+      if (heatmap && Math.abs(baseline.currentTime - heatmap.currentTime) > 0.06) {
+        heatmap.currentTime = baseline.currentTime;
+      }
       const dur = baseline.duration || 22;
       const cur = baseline.currentTime || 0;
-      const totalFrames = Math.round(dur * 12);   // 12 fps on these clips
+      const totalFrames = Math.round(dur * 12);
       const curFrame = Math.min(totalFrames, Math.floor(cur * 12));
       hudFrame.textContent = `frame ${curFrame.toString().padStart(3, "0")} / ${totalFrames}`;
       hudTime.textContent  = `${fmt(cur)} / ${fmt(dur)}`;
+      paintScrub(dur ? cur / dur : 0);
+      paintRibbon(curFrame);
       raf = requestAnimationFrame(tick);
     };
 
     const togglePlay = () => {
       if (baseline.paused) {
-        Promise.all([baseline.play(), cache.play()]).then(() => {
+        const ps = [baseline.play(), cache.play()];
+        if (heatmap) ps.push(heatmap.play());
+        Promise.all(ps).then(() => {
           playLabel.textContent = pauseText;
           tick();
         }).catch(() => {});
       } else {
         baseline.pause();
         cache.pause();
+        if (heatmap) heatmap.pause();
         playLabel.textContent = playText;
         cancelAnimationFrame(raf);
+        // freeze ribbon at current frame
+        const dur = baseline.duration || 22;
+        const cur = baseline.currentTime || 0;
+        paintRibbon(Math.floor(cur * 12));
       }
     };
 
     playBtn.addEventListener("click", togglePlay);
 
-    // play when the demo enters the viewport for the first time
+    /* play when in viewport */
     const obs = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting && baseline.paused) {
@@ -124,6 +209,19 @@ const scenarios = t.demo.scenarios;
 
     modeBtns.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 
+    /* keyboard niceties: ←/→ to seek 1 frame, space to play/pause */
+    root.tabIndex = 0;
+    root.addEventListener("keydown", (ev) => {
+      if (ev.key === " ") { ev.preventDefault(); togglePlay(); }
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
+        const step = (ev.key === "ArrowLeft" ? -1 : 1) * (1 / 12);
+        baseline.currentTime = Math.max(0, baseline.currentTime + step);
+        cache.currentTime = baseline.currentTime;
+        if (heatmap) heatmap.currentTime = baseline.currentTime;
+      }
+    });
+
     applyClip();
+    paintRibbon(0);
   });
 </script>

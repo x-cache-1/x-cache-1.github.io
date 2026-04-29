@@ -5,7 +5,7 @@ const { t } = Astro.props;
   <div class="shell fade-in">
     <span class="hero__tag">{t.hero.tag}</span>
     <h1 class="hero__title">
-      X<em>·</em>Cache<sup>v1.0</sup>
+      X<em>-</em>Cache<sup>v1.0</sup>
     </h1>
     <p class="hero__subtitle">{t.hero.subtitle}</p>
     <p class="lede hero__lede">{t.hero.lede}</p>
@@ -15,7 +15,7 @@ const { t } = Astro.props;
         {t.hero.ctaPrimary}
         <span class="btn__arrow" aria-hidden="true">→</span>
       </a>
-      <a class="btn btn--ghost" href="#paper">{t.hero.ctaSecondary}</a>
+      <a class="btn btn--ghost" href="https://arxiv.org/abs/2604.20289" target="_blank" rel="noopener">{t.hero.ctaSecondary}</a>
     </div>
 
     <div class="hero__stats">

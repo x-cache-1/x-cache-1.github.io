@@ -43,20 +43,32 @@ x-cache/
 
 ## The video comparator
 
-Each scenario ships *two* mp4s — `<scenario>_baseline.mp4` and
-`<scenario>_cache.mp4`, both at 1280×1160, 12 fps, identical pixel layout.
-The runtime in `Demos.astro` overlays them inside a single stage and offers
-three modes:
+Each scenario ships *three* mp4s — `<scenario>_baseline.mp4`,
+`<scenario>_cache.mp4`, and `<scenario>_heatmap.mp4`. The two main streams
+are 1920×800 12 fps cinematic 7-camera composites built from the world
+model's *raw* per-camera output (no HUD, no BEV, no trajectory chrome,
+no perception annotations). The heatmap is a 960×400 turbo-pseudocolour
+view of the per-pixel diff, encoded with a slight gaussian blur to keep
+file size in check.
+
+The runtime in `Demos.astro` overlays the three tracks in a single stage
+and offers four modes:
 
 | Mode    | What it does                                                                 |
 |---------|------------------------------------------------------------------------------|
 | Wipe    | Drag the seam to reveal baseline (left) ↔ X-Cache (right)                     |
-| Diff    | `mix-blend-mode: difference` — identical pixels collapse to black; the residual glows on a dark void, amplified ≈7× by a stage-level filter so the imperceptible drift becomes visible |
-| Shadow  | Duotone overlay (cache red-shifted, baseline blue-shifted) over `mix-blend-mode: lighten` — a "phantom" view; if the streams were pixel-identical, this would resolve to one sharp silhouette |
+| Diff    | `mix-blend-mode: difference` over a stage-level brightness amplifier — identical pixels collapse to black; cache-induced residual glows |
+| Shadow  | Duotone overlay (cache red-shifted, baseline blue-shifted) over `mix-blend-mode: lighten` — a "phantom" view |
+| Heatmap | Swap the cache layer for the precomputed turbo-pseudocolour diff. Honest linear scaling × 12: pure-zero pixels stay black, real disagreements light up navy → green → orange |
 
-All chrome (frame counter, scenario tag, skip-rate, speedup pill) is rendered
-as HTML over the videos, *not* burned into the frame, so diff mode shows only
-the model-side delta.
+The comparator also ships a draggable scrubber bar with chunk-tick markers,
+keyboard shortcuts (←/→ to step one frame, space to play/pause), and an
+animated DiT-block ribbon at the top-right of the stage that visualises
+which of the model's 27 blocks are computed vs. reused at the current frame.
+
+All chrome (frame counter, scenario tag, skip pill, ribbon) is rendered as
+HTML over the videos, *not* burned into the frame, so diff and heatmap
+modes show only the model-side delta.
 
 ## Regenerating the demo videos
 
@@ -74,7 +86,12 @@ python x-cache/scripts/build_videos.py \
     --src "..." --out x-cache/public/videos --scenarios uturn
 ```
 
-The script reads `debug_torch_<config>/<session>/vis_generated_frames/` for
-the baseline and `debug_cache_<config>/<session>/vis_generated_frames/` for
-the X-Cache rollout, fits them into the 1280×1160 panel, and emits H.264
-yuv420p mp4 + a poster JPG ready for the static site.
+The script reads `debug_torch_<config>/<session>/raw_cameras/` for the
+baseline and `debug_cache_<config>/<session>/raw_cameras/` for the X-Cache
+rollout. It composes the seven per-camera PNGs into a 1920×800 cinematic
+grid (`side_0 | front_0 | side_3` on top, `side_1 | front_1 | rear_0 | side_2`
+below), encodes baseline + cache mp4s, then computes the turbo-pseudocolour
+diff and encodes a half-resolution heatmap mp4 alongside.
+
+Pass `--heatmap-only` to refresh just the diff video while keeping existing
+baseline/cache mp4s — useful when iterating on the heatmap colour ramp.

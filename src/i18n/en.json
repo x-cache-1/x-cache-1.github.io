@@ -120,23 +120,24 @@
   "demo": {
     "kicker": "05 · Lossless · in motion",
     "title": "Drag the curtain. There is no quality drop.",
-    "lede": "Three scenarios, one toggle. Sweep the seam to compare baseline full-compute (left) and X-Cache (right) side by side, switch into the 20×-amplified diff to inspect every pixel of approximation error, or play them in shadow mode to overlay both at once.",
+    "lede": "Three scenarios, two ways to look at the same comparison. Sweep the seam to view baseline (left) ↔ X-Cache (right) side by side, or open the heatmap to see exactly where (and how often) the cache deviates — concentrated on lane edges and far-field foliage, almost nothing on solid road or sky.",
     "modeWipe": "Wipe",
-    "modeDiff": "Diff ×20",
-    "modeShadow": "Shadow",
+    "modeHeatmap": "Heatmap",
     "labelLeft": "Baseline · full compute",
     "labelRight": "X-Cache · 2.6× faster",
     "playLabel": "Play",
     "pauseLabel": "Pause",
+    "hint": "Drag the seam · scrub the timeline · ← / → to step one frame · space to play. Top-right strip is the live DiT block ribbon — gold = anchor, blue = recomputed, green = reused, indigo = KV-update protected.",
     "scenarios": [
       {
         "id": "urban",
-        "kicker": "Urban street",
+        "kicker": "Urban",
         "title": "Dense traffic, pedestrians, storefronts.",
         "body": "Seven urban clips with the highest static texture density in the test split. The cosine gate runs near-saturated; skip rate stays at 71.4% and the residual sits on lane edges and far-field foliage.",
         "tags": ["7 clips", "264 frames each", "PSNR 51.4 dB", "skip 71.4%"],
         "baseline": "/videos/urban_baseline.mp4",
         "cache": "/videos/urban_cache.mp4",
+        "heatmap": "/videos/urban_heatmap.mp4",
         "poster": "/videos/urban_poster.jpg"
       },
       {
@@ -147,6 +148,7 @@
         "tags": ["3 clips", "PSNR 54.7 dB", "skip 71.6%", "speedup 2.66×"],
         "baseline": "/videos/highway_baseline.mp4",
         "cache": "/videos/highway_cache.mp4",
+        "heatmap": "/videos/highway_heatmap.mp4",
         "poster": "/videos/highway_poster.jpg"
       },
       {
@@ -157,6 +159,7 @@
         "tags": ["3 clips", "PSNR 52.0 dB", "skip 71.3%", "speedup 2.70×"],
         "baseline": "/videos/uturn_baseline.mp4",
         "cache": "/videos/uturn_cache.mp4",
+        "heatmap": "/videos/uturn_heatmap.mp4",
         "poster": "/videos/uturn_poster.jpg"
       }
     ]

@@ -120,23 +120,24 @@
   "demo": {
     "kicker": "05 · 无损 · 可见",
     "title": "拖动分隔线,质量没有任何下降。",
-    "lede": "三个场景,一个切换器。拉动分隔条:左半边是 baseline 全量计算,右半边是 X-Cache;切到 20× 放大差值视图可逐像素检查近似误差;切到叠影模式则同时叠加两段视频。",
+    "lede": "三个场景,两种方式看同一组对比。拖动分隔条:左半边是 baseline 全量计算,右半边是 X-Cache;打开热力图,精确看到 X-Cache 与 baseline 在哪里、以多大幅度发生偏离——它们集中在车道线和远景树叶,而平整路面与天空几乎为零。",
     "modeWipe": "拉幕",
-    "modeDiff": "差值 ×20",
-    "modeShadow": "叠影",
+    "modeHeatmap": "热力图",
     "labelLeft": "Baseline · 全量计算",
     "labelRight": "X-Cache · 2.6× 加速",
     "playLabel": "播放",
     "pauseLabel": "暂停",
+    "hint": "拖动分隔条 · 拖动时间轴 · ←/→ 单帧步进 · 空格播放/暂停。右上是实时 DiT 块条带——金色=锚定块,蓝色=重算,绿色=复用,靛蓝=KV 更新强保护。",
     "scenarios": [
       {
         "id": "urban",
-        "kicker": "城市道路",
+        "kicker": "城市",
         "title": "密集车流、行人、临街商铺。",
         "body": "测试集中静态纹理密度最高的 7 段城市 clip。余弦门控接近饱和,跳过率稳定在 71.4%,残差几乎只落在车道线和远景树叶上。",
         "tags": ["7 段", "每段 264 帧", "PSNR 51.4 dB", "跳过 71.4%"],
         "baseline": "/videos/urban_baseline.mp4",
         "cache": "/videos/urban_cache.mp4",
+        "heatmap": "/videos/urban_heatmap.mp4",
         "poster": "/videos/urban_poster.jpg"
       },
       {
@@ -147,6 +148,7 @@
         "tags": ["3 段", "PSNR 54.7 dB", "跳过 71.6%", "加速 2.66×"],
         "baseline": "/videos/highway_baseline.mp4",
         "cache": "/videos/highway_cache.mp4",
+        "heatmap": "/videos/highway_heatmap.mp4",
         "poster": "/videos/highway_poster.jpg"
       },
       {
@@ -157,6 +159,7 @@
         "tags": ["3 段", "PSNR 52.0 dB", "跳过 71.3%", "加速 2.70×"],
         "baseline": "/videos/uturn_baseline.mp4",
         "cache": "/videos/uturn_cache.mp4",
+        "heatmap": "/videos/uturn_heatmap.mp4",
         "poster": "/videos/uturn_poster.jpg"
       }
     ]

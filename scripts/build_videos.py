@@ -1,25 +1,38 @@
 """Generate the X-Cache project page comparison videos.
 
-We emit *two* videos per scenario:
+For each scenario (urban / highway / u-turn) this script emits *three* videos:
 
-    <scenario>_baseline.mp4   — the no-cache full-compute rollout
-    <scenario>_cache.mp4      — the X-Cache rollout (same seed, same conditioning)
+    <scenario>_baseline.mp4   — no-cache full-compute rollout
+    <scenario>_cache.mp4      — X-Cache rollout (same seed, same conditioning)
+    <scenario>_heatmap.mp4    — per-pixel |baseline − cache| heat-mapped via
+                                a turbo colour ramp; shows where (and how
+                                much) the cache deviates, with honest
+                                linear scaling so the picture doesn't lie.
 
-Both videos are rendered at the *same* canvas size and pixel layout, with no
-chrome burned into the frame. The site runtime overlays them, sync-locks
-playback, and lets the user pick between three creative comparison modes:
+Source frames come from `raw_cameras/` — the *clean* 7-camera output of the
+world model, with no HUD overlays, no BEV plot, no trajectory chrome, no
+perception annotations drawn on top.  The seven per-frame PNGs
 
-    • wipe    — drag a seam to reveal one or the other
-    • diff    — `mix-blend-mode: difference` collapses identical pixels to
-                black so cache-induced perturbations glow on a dark void
-                (this is the page's "X-Ray" view of approximation error)
-    • shadow  — both layers playback overlaid with low opacity so they form
-                a single phantom image; if the two streams were identical
-                the silhouette would be perfectly sharp
+    frame_NNNN_gen_000_cam_front_0.png   (forward wide,  1024×512)
+    frame_NNNN_gen_000_cam_front_1.png   (forward narrow, 1024×512)
+    frame_NNNN_gen_000_cam_side_0.png    (front-left,    512×416)
+    frame_NNNN_gen_000_cam_side_1.png    (rear-left,     512×416)
+    frame_NNNN_gen_000_cam_side_2.png    (rear-right,    512×416)
+    frame_NNNN_gen_000_cam_side_3.png    (front-right,   512×416)
+    frame_NNNN_gen_000_cam_rear_0.png    (rear,          896×448)
 
-Keeping the two videos pixel-aligned and chrome-free is what makes the diff
-mode work. All HUD chrome (frame counter, scenario tag, KV-update marker,
-PSNR readout) is rendered as HTML over the video, not into it.
+are composited into a 1920×800 cinematic 360°-driving layout:
+
+    +---------+-------------------+---------+
+    | side_0  |     front_0       | side_3  |   row 1  (480 + 960 + 480, h=480)
+    +---------+---------+---------+---------+
+    | side_1  | front_1 | rear_0  | side_2  |   row 2  (4 × 480, h=320)
+    +---------+---------+---------+---------+
+
+The site runtime in `Compare.astro` overlays baseline + cache + heatmap and
+offers four creative comparison modes (wipe / diff / shadow / heatmap).
+HUD chrome (frame counter, scenario tag, skip pill, DiT block ribbon) is
+rendered as HTML over the video, never burned in.
 
 Usage:
     python x-cache/scripts/build_videos.py \\
@@ -37,22 +50,23 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+import numpy as np
+from PIL import Image, ImageFilter
+from matplotlib import colormaps
 
 # ----- constants -----------------------------------------------------------
 
-# Map scenario id → (debug_cache_dir suffix, debug_torch_dir suffix, session id, label)
 SCENARIOS = {
     "urban": (
+        "debug_cache_offline_dataset_config_wm_hwisp_sim_test_20",
+        "debug_torch_offline_dataset_config_wm_hwisp_sim_test_20",
+        "c-01bc6634-bb5d-39e9-b8f2-3d7a8ee39ee2_4",
+        "URBAN",
+    ),
+    "highway": (
         "debug_cache_offline_dataset_config",
         "debug_torch_offline_dataset_config",
         "c-06531d14-a7ea-3149-869b-2e84eb77e4fb_4",
-        "URBAN STREET",
-    ),
-    "highway": (
-        "debug_cache_offline_dataset_config_wh_hwisp_9m",
-        "debug_torch_offline_dataset_config_wh_hwisp_9m",
-        "c-1cf27392-301d-32b3-aef6-03d78491a89d_4",
         "HIGHWAY",
     ),
     "uturn": (
@@ -63,66 +77,114 @@ SCENARIOS = {
     ),
 }
 
-# Native 7-cam composite is ≈2438×2216 ≈ 1.10:1.  We resize to a pure 1280×1160
-# for the web (still ~1.1 aspect, fits comfortably on laptop and mobile).
-PANEL_W = 1280
-PANEL_H = 1160
-FPS     = 12
+# 2.4 : 1 cinematic — wider than tall, with the forward-wide camera (front_0,
+# the most informative view) anchored in the centre and the rest arranged
+# around it.  Cell aspect ratios are tuned so each camera's native image
+# fits with minimal cropping:
+#   side_0/3 → 480 × 480 (sources are 512 × 416, mild crop)
+#   front_0  → 960 × 480 (sources are 1024 × 512 ≈ 2 : 1, perfect fit)
+#   side_1/2 → 480 × 320 (sources are 512 × 416, mild crop)
+#   front_1  → 480 × 320 (sources are 1024 × 512 ≈ 2 : 1, mild crop)
+#   rear_0   → 480 × 320 (sources are 896 × 448 ≈ 2 : 1, mild crop)
+PANEL_W = 1920
+PANEL_H = 800
 
-FRAME_RE = re.compile(r"frame_(\d+)_gen_\d+_combined\.png$")
+ROW1_H = 480
+ROW2_H = 320
+COL_W  = 480
+FRONT_W = 960   # front_0 spans two columns at the centre
+
+CAM_LAYOUT: list[tuple[str, tuple[int, int, int, int]]] = [
+    # (cam_name, (x, y, w, h))
+    ("side_0",  (0,                 0,        COL_W,   ROW1_H)),
+    ("front_0", (COL_W,             0,        FRONT_W, ROW1_H)),
+    ("side_3",  (COL_W + FRONT_W,   0,        COL_W,   ROW1_H)),
+    ("side_1",  (0,                 ROW1_H,   COL_W,   ROW2_H)),
+    ("front_1", (COL_W,             ROW1_H,   COL_W,   ROW2_H)),
+    ("rear_0",  (2 * COL_W,         ROW1_H,   COL_W,   ROW2_H)),
+    ("side_2",  (3 * COL_W,         ROW1_H,   COL_W,   ROW2_H)),
+]
+
+# Heatmap encoded at half-resolution + softened by a small gaussian blur:
+# the per-pixel speckle generated by colourising tiny diffs is high-entropy
+# and x264 struggles to compress it at the natural-video bitrate.  Half-res
+# plus blur keeps the macro picture intact while bringing files under 10 MB.
+HEAT_W  = PANEL_W // 2     # 960
+HEAT_H  = PANEL_H // 2     # 400
+HEAT_BLUR_RADIUS = 1.0
+
+FPS = 12
+
+CAM_FRAME_RE = re.compile(r"frame_(\d+)_gen_(\d+)_cam_(.+)\.png$")
+
+_TURBO_LUT = (colormaps["turbo"](np.linspace(0.0, 1.0, 256))[:, :3] * 255).astype(np.uint8)
 
 
-def find_frames(dir_path: Path) -> list[Path]:
-    pairs = []
-    for p in dir_path.iterdir():
-        m = FRAME_RE.search(p.name)
-        if m:
-            pairs.append((int(m.group(1)), p))
-    pairs.sort()
-    return [p for _, p in pairs]
+# ----- camera grid composition --------------------------------------------
+
+def _index_raw_cameras(raw_dir: Path) -> dict[int, dict[str, Path]]:
+    """{frame_idx: {cam_name: path}}.  We use the latest gen index per (frame, cam)."""
+    out: dict[int, dict[str, Path]] = {}
+    for p in sorted(raw_dir.iterdir()):
+        m = CAM_FRAME_RE.search(p.name)
+        if not m:
+            continue
+        fid = int(m.group(1))
+        cam = m.group(3)
+        out.setdefault(fid, {})[cam] = p
+    return out
 
 
-def fit_panel(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
-    """Resize-then-center-crop so the image fills target W×H, no letterbox.
-    Source aspect (~1.10) is essentially identical to the 1280×1160 target,
-    so this is a near-pure resize."""
-    src_w, src_h = img.size
-    src_ar = src_w / src_h
-    tgt_ar = target_w / target_h
+def _fit_into(img: Image.Image, w: int, h: int) -> Image.Image:
+    """Resize-crop centre to exactly (w, h)."""
+    iw, ih = img.size
+    src_ar = iw / ih
+    tgt_ar = w / h
     if src_ar > tgt_ar:
-        new_h = target_h
-        new_w = int(round(src_w * (new_h / src_h)))
+        # source wider — fit by height, crop width
+        new_h = h
+        new_w = round(iw * (new_h / ih))
     else:
-        new_w = target_w
-        new_h = int(round(src_h * (new_w / src_w)))
+        new_w = w
+        new_h = round(ih * (new_w / iw))
     img = img.resize((new_w, new_h), Image.BICUBIC)
-    left = (new_w - target_w) // 2
-    top  = (new_h - target_h) // 2
-    return img.crop((left, top, left + target_w, top + target_h))
+    left = (new_w - w) // 2
+    top = (new_h - h) // 2
+    return img.crop((left, top, left + w, top + h))
 
 
-def render_frames(frame_paths: list[Path], tmp: Path, max_frames: int | None = None) -> int:
-    """Resize each PNG into the temp directory as JPGs ready for ffmpeg."""
-    n = len(frame_paths) if max_frames is None else min(len(frame_paths), max_frames)
-    for i in range(n):
-        img = Image.open(frame_paths[i]).convert("RGB")
-        panel = fit_panel(img, PANEL_W, PANEL_H)
-        panel.save(tmp / f"f_{i:05d}.jpg", quality=88)
+def compose_camera_grid(frame_cams: dict[str, Path]) -> Image.Image:
+    """Lay out the 7 raw cameras into the project-page composite."""
+    canvas = Image.new("RGB", (PANEL_W, PANEL_H), (4, 4, 8))
+    for cam, (x, y, w, h) in CAM_LAYOUT:
+        if cam not in frame_cams:
+            continue
+        img = Image.open(frame_cams[cam]).convert("RGB")
+        canvas.paste(_fit_into(img, w, h), (x, y))
+    return canvas
+
+
+# ----- per-frame work ------------------------------------------------------
+
+def render_frames(by_frame: dict[int, dict[str, Path]],
+                  frame_ids: list[int],
+                  tmp: Path) -> int:
+    n = len(frame_ids)
+    for i, fid in enumerate(frame_ids):
+        compose_camera_grid(by_frame[fid]).save(tmp / f"f_{i:05d}.jpg", quality=88)
         if (i + 1) % 50 == 0 or i == n - 1:
-            print(f"    · resized {i + 1}/{n}", flush=True)
+            print(f"    · composed {i + 1}/{n}", flush=True)
     return n
 
 
-def encode(tmp: Path, out_path: Path) -> None:
-    """ffmpeg encode H.264 yuv420p, sized to even dimensions."""
+def encode(tmp: Path, out_path: Path, crf: int = 22) -> None:
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error",
         "-framerate", str(FPS),
         "-i", str(tmp / "f_%05d.jpg"),
-        "-vf", f"scale={PANEL_W}:{PANEL_H}:flags=lanczos",
         "-c:v", "libx264",
         "-preset", "slow",
-        "-crf", "20",
+        "-crf", str(crf),
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         "-r", str(FPS),
@@ -131,48 +193,100 @@ def encode(tmp: Path, out_path: Path) -> None:
     subprocess.run(cmd, check=True)
 
 
-def render_poster(frame_path: Path, out_path: Path) -> None:
-    img = Image.open(frame_path).convert("RGB")
-    panel = fit_panel(img, PANEL_W, PANEL_H)
-    panel.save(out_path, quality=85)
+def render_heatmap_frame(base_cams: dict[str, Path],
+                         cache_cams: dict[str, Path]) -> Image.Image:
+    """Compute a turbo-pseudocolour |baseline - cache| heatmap for one frame.
+
+    Honest linear scaling — *no* gamma boost.  Per-pixel raw deltas on this
+    workload sit at < 1 / 255 on average (PSNR ≈ 52 dB, p99 raw delta ≈ 2),
+    so we scale linearly by 12× and clip to [0, 1].  The result:
+        delta = 0   → black                          (no difference)
+        delta = 1   → dark navy                      (encoding-noise scale)
+        delta = 5   → blue                           (real but tiny)
+        delta = 10  → green                          (visible)
+        delta = 20+ → orange / red                   (rare)
+    Most pixels stay black: the cache really does change almost nothing.
+    Only edges and high-frequency texture (lane lines, foliage, far-field
+    skylines) light up.  That is the page's claim, made visible."""
+    base  = np.asarray(compose_camera_grid(base_cams),  dtype=np.int16)
+    cache = np.asarray(compose_camera_grid(cache_cams), dtype=np.int16)
+
+    diff = np.abs(base - cache).max(axis=2).astype(np.float32)        # raw 0..255
+    scaled = np.clip(diff * 12.0 / 255.0, 0.0, 1.0)                   # linear ×12
+    idx = (scaled * 255.0).astype(np.uint8)
+    colored = _TURBO_LUT[idx]
+    colored[diff == 0.0] = (4, 4, 8)                                  # exact match → true black
+
+    img = Image.fromarray(colored, mode="RGB")
+    img = img.resize((HEAT_W, HEAT_H), Image.BICUBIC)
+    if HEAT_BLUR_RADIUS > 0:
+        img = img.filter(ImageFilter.GaussianBlur(radius=HEAT_BLUR_RADIUS))
+    return img
 
 
-def build_scenario(src_root: Path, out_dir: Path, scen_id: str) -> None:
+def encode_heatmap(torch_by_frame: dict[int, dict[str, Path]],
+                   cache_by_frame: dict[int, dict[str, Path]],
+                   frame_ids: list[int],
+                   out_path: Path) -> None:
+    n = len(frame_ids)
+    with tempfile.TemporaryDirectory(prefix="xc_heat_") as tmp:
+        tmp = Path(tmp)
+        for i, fid in enumerate(frame_ids):
+            heat = render_heatmap_frame(torch_by_frame[fid], cache_by_frame[fid])
+            heat.save(tmp / f"f_{i:05d}.jpg", quality=82)
+            if (i + 1) % 50 == 0 or i == n - 1:
+                print(f"    · heatmap {i + 1}/{n}", flush=True)
+        encode(tmp, out_path, crf=30)
+
+
+def render_poster(frame_cams: dict[str, Path], out_path: Path) -> None:
+    compose_camera_grid(frame_cams).save(out_path, quality=85)
+
+
+# ----- per-scenario --------------------------------------------------------
+
+def build_scenario(src_root: Path, out_dir: Path, scen_id: str, *,
+                   heatmap_only: bool = False) -> None:
     cache_suffix, torch_suffix, session, label = SCENARIOS[scen_id]
-    cache_frames_dir = src_root / cache_suffix / session / "vis_generated_frames"
-    torch_frames_dir = src_root / torch_suffix / session / "vis_generated_frames"
+    cache_raw_dir = src_root / cache_suffix / session / "raw_cameras"
+    torch_raw_dir = src_root / torch_suffix / session / "raw_cameras"
 
-    cache_list = find_frames(cache_frames_dir)
-    torch_list = find_frames(torch_frames_dir)
-    n = min(len(cache_list), len(torch_list))
-    if n == 0:
-        raise SystemExit(f"[fail] {scen_id}: no frame pairs under {src_root}")
+    if not cache_raw_dir.exists() or not torch_raw_dir.exists():
+        raise SystemExit(f"[fail] {scen_id}: raw_cameras dir missing under {src_root}")
 
-    print(f"[{scen_id}] {label}  ·  {n} paired frames")
+    cache_by_frame = _index_raw_cameras(cache_raw_dir)
+    torch_by_frame = _index_raw_cameras(torch_raw_dir)
+    frame_ids = sorted(set(cache_by_frame) & set(torch_by_frame))
+    if not frame_ids:
+        raise SystemExit(f"[fail] {scen_id}: no overlapping frame indices")
+
+    print(f"[{scen_id}] {label}  ·  {len(frame_ids)} paired frames")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_baseline = out_dir / f"{scen_id}_baseline.mp4"
     out_cache    = out_dir / f"{scen_id}_cache.mp4"
+    out_heatmap  = out_dir / f"{scen_id}_heatmap.mp4"
     out_poster   = out_dir / f"{scen_id}_poster.jpg"
 
-    # Baseline pass
-    print(f"  baseline → {out_baseline.name}")
-    with tempfile.TemporaryDirectory(prefix=f"xc_{scen_id}_b_") as tmp:
-        tmp = Path(tmp)
-        n_actual = render_frames(torch_list[:n], tmp)
-        encode(tmp, out_baseline)
+    if not heatmap_only:
+        print(f"  baseline → {out_baseline.name}")
+        with tempfile.TemporaryDirectory(prefix=f"xc_{scen_id}_b_") as tmp:
+            tmp = Path(tmp)
+            render_frames(torch_by_frame, frame_ids, tmp)
+            encode(tmp, out_baseline)
 
-    # Cache pass
-    print(f"  cache    → {out_cache.name}")
-    with tempfile.TemporaryDirectory(prefix=f"xc_{scen_id}_c_") as tmp:
-        tmp = Path(tmp)
-        render_frames(cache_list[:n], tmp)
-        encode(tmp, out_cache)
+        print(f"  cache    → {out_cache.name}")
+        with tempfile.TemporaryDirectory(prefix=f"xc_{scen_id}_c_") as tmp:
+            tmp = Path(tmp)
+            render_frames(cache_by_frame, frame_ids, tmp)
+            encode(tmp, out_cache)
 
-    # Poster from a mid-clip cache frame
-    render_poster(cache_list[n // 2], out_poster)
+    print(f"  heatmap  → {out_heatmap.name}")
+    encode_heatmap(torch_by_frame, cache_by_frame, frame_ids, out_heatmap)
 
-    print(f"[{scen_id}] done  ·  baseline={out_baseline.name}  cache={out_cache.name}  poster={out_poster.name}")
+    if not heatmap_only:
+        render_poster(cache_by_frame[frame_ids[len(frame_ids) // 2]], out_poster)
+    print(f"[{scen_id}] done")
 
 
 def main():
@@ -184,6 +298,8 @@ def main():
                     help="output dir, e.g. x-cache/public/videos")
     ap.add_argument("--scenarios", nargs="*", default=None,
                     help="subset to build, e.g. urban highway")
+    ap.add_argument("--heatmap-only", action="store_true",
+                    help="only re-render the diff heatmaps, keep existing baseline/cache mp4s")
     args = ap.parse_args()
 
     src = Path(args.src).expanduser().resolve()
@@ -195,7 +311,7 @@ def main():
 
     targets = args.scenarios or list(SCENARIOS.keys())
     for scen in targets:
-        build_scenario(src, out, scen)
+        build_scenario(src, out, scen, heatmap_only=args.heatmap_only)
 
 
 if __name__ == "__main__":

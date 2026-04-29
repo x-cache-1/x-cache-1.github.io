@@ -2,6 +2,7 @@
 import "../styles/global.css";
 
 const { title, description, lang = "en", ogAlt = title } = Astro.props;
+const base = import.meta.env.BASE_URL;
 ---
 
 <!doctype html>
@@ -10,14 +11,14 @@ const { title, description, lang = "en", ogAlt = title } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#0d0e10" />
+    <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content="/figures/og.svg" />
+    <meta property="og:image" content={`${base}figures/og.svg`} />
     <meta property="og:image:alt" content={ogAlt} />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" href="/figures/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={`${base}figures/favicon.svg`} type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
