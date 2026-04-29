@@ -724,6 +724,7 @@ p {
   padding: 0.42rem 0.7rem;
   border-radius: 999px;
   backdrop-filter: blur(6px);
+  overflow: hidden;
   font-family: var(--mono);
   font-size: 0.66rem;
   letter-spacing: 0.16em;
