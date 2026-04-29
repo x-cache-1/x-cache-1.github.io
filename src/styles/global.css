@@ -729,7 +729,7 @@ p {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: rgba(246, 241, 230, 0.7);
-  max-width: min(60%, 540px);
+  max-width: min(38%, 320px);
 }
 .cmp__ribbon-label { white-space: nowrap; }
 .cmp__ribbon-track {
@@ -752,7 +752,7 @@ p {
 .blk[data-state="kv"]      { background: var(--indigo); box-shadow: 0 0 6px rgba(102, 120, 224, 0.65); }
 
 @media (max-width: 700px) {
-  .cmp__ribbon { max-width: 60%; gap: 0.35rem; padding: 0.32rem 0.5rem; }
+  .cmp__ribbon { max-width: 44%; gap: 0.35rem; padding: 0.32rem 0.5rem; }
   .cmp__ribbon-label { display: none; }
 }
 

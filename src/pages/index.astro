@@ -3,19 +3,19 @@
    We can't use `Astro.redirect()` for `output: 'static'` builds; this works
    in both static and SSR. */
 const base = import.meta.env.BASE_URL;
-const enUrl = `${base}en/`;
+const homeUrl = `${base}zh/`;
 ---
-<html lang="en">
+<html lang="zh">
   <head>
     <meta charset="utf-8" />
     <title>X-Cache</title>
-    <meta http-equiv="refresh" content={`0; url=${enUrl}`} />
-    <link rel="canonical" href={enUrl} />
-    <script is:inline define:vars={{ enUrl }}>
-      window.location.replace(enUrl);
+    <meta http-equiv="refresh" content={`0; url=${homeUrl}`} />
+    <link rel="canonical" href={homeUrl} />
+    <script is:inline define:vars={{ homeUrl }}>
+      window.location.replace(homeUrl);
     </script>
   </head>
   <body>
-    <p>Redirecting to <a href={enUrl}>{enUrl}</a>…</p>
+    <p>正在跳转 <a href={homeUrl}>{homeUrl}</a>…</p>
   </body>
 </html>
