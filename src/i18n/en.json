@@ -175,7 +175,6 @@
   "footer": {
     "team": "AI Infra Team · XPeng Inc.",
     "report": "Technical Report",
-    "year": "2026",
-    "note": "Site code, generation scripts, and the full report live in this repo. Videos are produced from the held-out test rollouts under wm_v2.0."
+    "year": "2026"
   }
 }
