@@ -729,9 +729,9 @@ p {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: rgba(246, 241, 230, 0.7);
-  max-width: min(38%, 320px);
+  max-width: min(32%, 220px);
 }
-.cmp__ribbon-label { white-space: nowrap; }
+.cmp__ribbon-label { display: none; }
 .cmp__ribbon-track {
   display: flex;
   gap: 1px;
@@ -739,9 +739,9 @@ p {
   align-items: center;
 }
 .blk {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   height: 14px;
-  min-width: 4px;
+  min-width: 3px;
   background: rgba(246, 241, 230, 0.18);
   border-radius: 1px;
   transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
